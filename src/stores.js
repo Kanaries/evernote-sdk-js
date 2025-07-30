@@ -25,18 +25,26 @@ import BinaryProtocol from './thrift/protocol/binaryProtocol';
 import pjson from '../package.json';
 
 const AUTH_PLACEHOLDER = 'AUTH_TOKEN';
-const STRIP_COMMENTS = /((\/\/.*$)|(\/\*[\s\S]*?\*\/))/gm;
-const ARGUMENT_NAMES = /([^\s,]+)/g;
 
-/**
- * Finds parameter names for a given function.
- * @return {Object[]}
- */
-function getParamNames(fn) {
-  let fnString = fn.toString().replace(STRIP_COMMENTS, '');
-  let paramNames = fnString.slice(fnString.indexOf('(') + 1, fnString.indexOf(')'))
-      .match(ARGUMENT_NAMES);
-  return paramNames === null ? [] : paramNames;
+function argsToParamNames(args) {
+  let fields = args.fields;
+  let keys = Object.keys(fields);
+  let paramNames = new Array(keys.length);
+  let fid;
+  let index;
+  let i;
+
+  for (i = 0; i < keys.length; i++) {
+    fid = keys[i];
+    index = fields[fid].index;
+    if (index !== null) {
+      paramNames[index] = fields[fid].alias;
+    } else {
+      paramNames[i] = fields[fid].alias;
+    }
+  }
+
+  return paramNames;
 }
 
 /**
@@ -47,12 +55,11 @@ function getParamNames(fn) {
  * @param {String} fnName
  * @return {Promise}
  */
-function makeProxyPromise(fn, fnName) {
+function makeProxyPromise(fn, fnName, info) {
   return function() {
     let newArgs = [];
-    let paramNames = getParamNames(fn);
+    let paramNames = argsToParamNames(info.args);
     let requiresAuthToken = false;
-    paramNames.pop(); // remove the callback parameter, will use Promise instead.
     for (let i = 0; i < paramNames.length; i++) {
       let param = paramNames[i];
       if (param === 'authenticationToken') {
@@ -67,7 +74,7 @@ function makeProxyPromise(fn, fnName) {
       const expectedNum = requiresAuthToken ? paramNames.length - 1 : paramNames.length;
       const actualNum = requiresAuthToken ? newArgs.length - 1 : newArgs.length;
       if (expectedNum !== actualNum) {
-        reject(`Incorrect number of arguments passed to ${fnName}: expected ${expectedNum} but found ${actualNum}`);
+        reject(new Error(`Incorrect number of arguments passed to ${fnName}: expected ${expectedNum} but found ${actualNum}`));
       } else {
         const prelimPromise = requiresAuthToken ? this.getAuthToken() : Promise.resolve();
         prelimPromise.then(authTokenMaybe => {
@@ -82,10 +89,10 @@ function makeProxyPromise(fn, fnName) {
   };
 }
 
-function extendClientWithEdamClient(Client, EDAMClient) {
+function extendClientWithEdamClient(Client, EDAMClient, Store) {
   for (let key in EDAMClient.prototype) {
     if (typeof EDAMClient.prototype[key] === 'function') {
-      Client.prototype[key] = makeProxyPromise(EDAMClient.prototype[key], key);
+      Client.prototype[key] = makeProxyPromise(EDAMClient.prototype[key], key, Store[key]);
     }
   }
 }
@@ -118,7 +125,7 @@ class UserStoreClient extends EDAMUserStore.Client {
     return new Promise(resolve => resolve(this.token));
   }
 }
-extendClientWithEdamClient(UserStoreClient, EDAMUserStore.Client);
+extendClientWithEdamClient(UserStoreClient, EDAMUserStore.Client, EDAMNoteStore);
 
 class NoteStoreClient extends EDAMNoteStore.Client {
   constructor(opts = {}) {
@@ -141,6 +148,6 @@ class NoteStoreClient extends EDAMNoteStore.Client {
   }
 }
 
-extendClientWithEdamClient(NoteStoreClient, EDAMNoteStore.Client);
+extendClientWithEdamClient(NoteStoreClient, EDAMNoteStore.Client, EDAMNoteStore);
 
 export {NoteStoreClient, UserStoreClient};
