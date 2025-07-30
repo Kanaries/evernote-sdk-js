@@ -27,14 +27,13 @@ import pjson from '../package.json';
 const AUTH_PLACEHOLDER = 'AUTH_TOKEN';
 
 function argsToParamNames(args) {
-  let fields = args.fields;
-  let keys = Object.keys(fields);
-  let paramNames = new Array(keys.length);
+  const fields = args.fields;
+  const keys = Object.keys(fields);
+  const paramNames = new Array(keys.length);
   let fid;
   let index;
-  let i;
 
-  for (i = 0; i < keys.length; i++) {
+  for (let i = 0; i < keys.length; i++) {
     fid = keys[i];
     index = fields[fid].index;
     if (index !== null) {
@@ -125,7 +124,7 @@ class UserStoreClient extends EDAMUserStore.Client {
     return new Promise(resolve => resolve(this.token));
   }
 }
-extendClientWithEdamClient(UserStoreClient, EDAMUserStore.Client, EDAMNoteStore);
+extendClientWithEdamClient(UserStoreClient, EDAMUserStore.Client, EDAMUserStore);
 
 class NoteStoreClient extends EDAMNoteStore.Client {
   constructor(opts = {}) {
